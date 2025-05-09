@@ -9,25 +9,22 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
-// Quick response while scraping is in progress
 app.post('/scrape', async (req, res) => {
   const { specialty, location } = req.body;
 
   if (!specialty || !location) {
-    return res.status(400).json({ error: 'Missing specialty or location' });
+    return res.status(400).json({ status: 'error', message: 'Missing specialty or location' });
   }
 
-  // Send a quick response while scraping in the background
-  res.json({ status: 'in_progress', message: 'Scraping started, results will be processed.' });
-
   try {
-    const result = await scrapeProfiles({ specialty, location });
-    console.log(result);
-    // Return the scraped results after processing
-    res.json({ status: 'success', profiles: result });
+    const profiles = await scrapeProfiles({ specialty, location });
+    return res.status(200).json({ status: 'success', results: profiles });
   } catch (error) {
+    // Log only; avoid another res.json if already sent
     console.error('❌ Scraping failed:', error);
-    res.status(500).json({ error: 'Failed to scrape profiles' });
+    if (!res.headersSent) {
+      return res.status(500).json({ status: 'error', message: 'Failed to scrape profiles' });
+    }
   }
 });
 
