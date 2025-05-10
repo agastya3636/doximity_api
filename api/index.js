@@ -1,33 +1,43 @@
-import express from 'express';
-import dotenv from 'dotenv';
-import scrapeProfiles from './scrapeService.js';
-
-dotenv.config();
+import express from "express";
+import bodyParser from "body-parser";
+import puppeteer from "puppeteer";
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
+// Middleware
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
-app.post('/scrape', async (req, res) => {
-  const { specialty, location } = req.body;
-
-  if (!specialty || !location) {
-    return res.status(400).json({ status: 'error', message: 'Missing specialty or location' });
-  }
-
+// Define a sample API route
+app.get("/", async (req, res) => {
   try {
-    const profiles = await scrapeProfiles({ specialty, location });
-    return res.status(200).json({ status: 'success', results: profiles });
+    // Example Puppeteer usage: Fetch the title of a webpage
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'], // Required for Vercel serverless functions
+    });
+    const page = await browser.newPage();
+    await page.goto("https://example.com");
+    
+    const title = await page.title();
+    await browser.close();
+
+    res.status(200).json({
+      message: "API is working!",
+      title: title,
+    });
   } catch (error) {
-    // Log only; avoid another res.json if already sent
-    console.error('❌ Scraping failed:', error);
-    if (!res.headersSent) {
-      return res.status(500).json({ status: 'error', message: 'Failed to scrape profiles' });
-    }
+    console.error("Error in API:", error);
+    res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running at http://localhost:${PORT}`);
-});
+// Start the server (for local development only)
+if (process.env.NODE_ENV !== "production") {
+  const PORT = 3000;
+  app.listen(PORT, () => {
+    console.log(`Server is running on http://localhost:${PORT}`);
+  });
+}
+
+export default app;
