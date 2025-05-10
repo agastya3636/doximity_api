@@ -32,8 +32,8 @@ const scrapeProfiles = async ({ specialty, location }) => {
     console.log('✅ Logged in, navigating to search page...');
     await page.goto('https://www.doximity.com/talent_finder/search', { waitUntil: 'networkidle2' });
 
-    // Wait for 15 seconds before trying to access search input
-    await page.waitFor(15000); // Changed waitForTimeout to waitFor
+    // Wait for the search input to be ready (we're waiting for a valid selector here)
+    await page.waitForSelector('input[type="search"]', { timeout: 15000 });
 
     const searchSelectors = [
       'input[type="search"]',
@@ -68,8 +68,8 @@ const scrapeProfiles = async ({ specialty, location }) => {
     console.log(`🔍 Searching for: "${keywordSearch}"...`);
     await page.waitForSelector('.resultrow', { timeout: 15000 });
 
-    // Wait 5 seconds to let results fully load
-    await page.waitFor(5000); // Changed waitForTimeout to waitFor
+    // Wait for 5 seconds to let results fully load
+    await page.waitForSelector('.resultrow', { timeout: 5000 });
 
     const profiles = await page.$$eval('.resultrow', rows =>
       rows.slice(0, 15).map(row => {
