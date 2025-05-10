@@ -18,23 +18,46 @@ const scrapeProfiles = async ({ specialty, location }) => {
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36'
   );
 
-  const { DOXIMITY_USERNAME, DOXIMITY_PASSWORD } = process.env;
+  const DOXIMITY_USERNAME = process.env.DOXIMITY_USERNAME;
+  const DOXIMITY_PASSWORD = process.env.DOXIMITY_PASSWORD;
 
   try {
-    console.log('🔐 Logging in...');
+    console.log('🔐 Navigating to login page...');
     await page.goto('https://www.doximity.com/login', { waitUntil: 'networkidle2' });
 
-    await page.type('input[name="login"]', DOXIMITY_USERNAME);
-    await page.type('input[name="password"]', DOXIMITY_PASSWORD);
+    await page.waitForSelector('input[name="login"]', { timeout: 15000 });
+    await page.type('input[name="login"]', DOXIMITY_USERNAME, { delay: 100 });
+    await page.type('input[name="password"]', DOXIMITY_PASSWORD, { delay: 100 });
     await page.click('button[type="submit"]');
     await page.waitForNavigation({ waitUntil: 'networkidle2' });
 
-    console.log('✅ Logged in, performing search...');
+    // Check login success
+    const currentUrl = page.url();
+    if (!currentUrl.includes('talent_finder')) {
+      console.warn('⚠️ Login may not have redirected properly, attempting manual navigation.');
+      await page.goto('https://www.doximity.com/talent_finder/search', { waitUntil: 'networkidle2' });
+    }
+
+    console.log('✅ Logged in, navigating to search page...');
     await page.goto('https://www.doximity.com/talent_finder/search', { waitUntil: 'networkidle2' });
 
-    await page.type('input[type="search"][data-sel-q]', keywordSearch);
+    console.log(`🔍 Waiting for search input...`);
+    await page.waitForSelector('input[type="search"]', { timeout: 10000 });
+
+    // Try fallback in case data-sel-q is missing
+    const inputSelector = 'input[type="search"][data-sel-q]' 
+      || 'input[type="search"]';
+
+    await page.click(inputSelector);
+    await page.keyboard.down('Control');
+    await page.keyboard.press('A');
+    await page.keyboard.up('Control');
+    await page.keyboard.press('Backspace');
+    await page.type(inputSelector, keywordSearch);
     await page.keyboard.press('Enter');
-    await page.waitForSelector('.resultrow');
+
+    console.log(`🔍 Searching for: "${keywordSearch}"...`);
+    await page.waitForSelector('.resultrow', { timeout: 8000 });
 
     const profiles = await page.$$eval('.resultrow', rows =>
       rows.slice(0, 15).map(row => {
@@ -52,13 +75,14 @@ const scrapeProfiles = async ({ specialty, location }) => {
       })
     );
 
-    console.log(`📁 Scraped ${profiles.length} profiles`);
+    console.log(`📁 Found ${profiles.length} profiles`);
     await browser.close();
     return profiles;
   } catch (err) {
-    console.error('❌ Scraping error:', err);
+    console.error('❌ Scraping failed:', err.message);
+    await page.screenshot({ path: '/tmp/error-screenshot.png' });
     await browser.close();
-    throw new Error('Scraping failed');
+    throw new Error('Failed during scraping process');
   }
 };
 
