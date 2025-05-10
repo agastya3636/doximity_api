@@ -24,37 +24,52 @@ const scrapeProfiles = async ({ specialty, location }) => {
     console.log('🔐 Logging in...');
     await page.goto('https://www.doximity.com/login', { waitUntil: 'networkidle2' });
 
-    await page.type('input[name="login"]', DOXIMITY_USERNAME);
-    await page.type('input[name="password"]', DOXIMITY_PASSWORD);
+    await page.type('input[name="login"]', DOXIMITY_USERNAME, { delay: 100 });
+    await page.type('input[name="password"]', DOXIMITY_PASSWORD, { delay: 100 });
     await page.click('button[type="submit"]');
     await page.waitForNavigation({ waitUntil: 'networkidle2' });
 
     console.log('✅ Logged in, navigating to search page...');
     await page.goto('https://www.doximity.com/talent_finder/search', { waitUntil: 'networkidle2' });
 
-    // Wait a few seconds to let dynamic content load
-    await new Promise(res => setTimeout(res, 3000));
+    // Wait for 15 seconds before trying to access search input
+    await page.waitForTimeout(15000);
 
-    // Try to find the input element for search
-    const searchSelector = 'input[type="search"]';
-    const inputExists = await page.$(searchSelector);
+    const searchSelectors = [
+      'input[type="search"]',
+      'input[data-sel-q]',
+      'input[placeholder*="Search"]',
+    ];
 
-    if (!inputExists) {
-      throw new Error(`⚠️ Failed to find search input with selector: ${searchSelector}`);
+    let foundSelector = null;
+    for (const sel of searchSelectors) {
+      const exists = await page.$(sel);
+      if (exists) {
+        foundSelector = sel;
+        break;
+      }
     }
 
-    await page.click(searchSelector);
+    if (!foundSelector) {
+      const html = await page.content();
+      console.error('❌ Could not find search input. HTML snapshot:\n', html.slice(0, 1000));
+      throw new Error('⚠️ Failed to find search input with known selectors.');
+    }
+
+    console.log(`✅ Found search input with selector: ${foundSelector}`);
+    await page.click(foundSelector);
     await page.keyboard.down('Control');
     await page.keyboard.press('A');
     await page.keyboard.up('Control');
     await page.keyboard.press('Backspace');
-    await page.type(searchSelector, keywordSearch);
+    await page.type(foundSelector, keywordSearch);
     await page.keyboard.press('Enter');
 
     console.log(`🔍 Searching for: "${keywordSearch}"...`);
+    await page.waitForSelector('.resultrow', { timeout: 15000 });
 
-    // Wait for search results to appear
-    await page.waitForSelector('.resultrow', { timeout: 10000 });
+    // Wait 5 seconds to let results fully load
+    await page.waitForTimeout(5000);
 
     const profiles = await page.$$eval('.resultrow', rows =>
       rows.slice(0, 15).map(row => {
