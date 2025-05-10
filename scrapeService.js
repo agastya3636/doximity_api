@@ -32,8 +32,11 @@ const scrapeProfiles = async ({ specialty, location }) => {
     console.log('✅ Logged in, navigating to search page...');
     await page.goto('https://www.doximity.com/talent_finder/search', { waitUntil: 'networkidle2' });
 
-    // Wait for the search input to be ready (we're waiting for a valid selector here)
-    await page.waitForSelector('input[type="search"]', { timeout: 15000 });
+    // Increase timeout and wait for another stable element
+    await page.waitForSelector('.some-other-stable-element', { timeout: 30000 }); // Replace with an actual stable selector
+
+    // Now wait for the search input
+    await page.waitForSelector('input[type="search"]', { timeout: 30000 });
 
     const searchSelectors = [
       'input[type="search"]',
@@ -66,7 +69,7 @@ const scrapeProfiles = async ({ specialty, location }) => {
     await page.keyboard.press('Enter');
 
     console.log(`🔍 Searching for: "${keywordSearch}"...`);
-    await page.waitForSelector('.resultrow', { timeout: 15000 });
+    await page.waitForSelector('.resultrow', { timeout: 30000 });
 
     // Wait for 5 seconds to let results fully load
     await page.waitForSelector('.resultrow', { timeout: 5000 });
