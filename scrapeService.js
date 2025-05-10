@@ -6,7 +6,6 @@ dotenv.config();
 
 const scrapeProfiles = async ({ specialty, location }) => {
   const keywordSearch = `${specialty} ${location}`.trim();
-  const { DOXIMITY_USERNAME, DOXIMITY_PASSWORD } = process.env;
 
   const browser = await puppeteer.launch({
     executablePath: await chromium.executablePath(),
@@ -19,6 +18,8 @@ const scrapeProfiles = async ({ specialty, location }) => {
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36'
   );
 
+  const { DOXIMITY_USERNAME, DOXIMITY_PASSWORD } = process.env;
+
   try {
     console.log('🔐 Logging in...');
     await page.goto('https://www.doximity.com/login', { waitUntil: 'networkidle2' });
@@ -30,52 +31,30 @@ const scrapeProfiles = async ({ specialty, location }) => {
 
     console.log('✅ Logged in, navigating to search page...');
     await page.goto('https://www.doximity.com/talent_finder/search', { waitUntil: 'networkidle2' });
-    await page.waitForTimeout(3000); // Let content render
 
-    // Debug: log input fields to help identify the correct one
-    const inputs = await page.$$eval('input', els =>
-      els.map(el => ({
-        name: el.getAttribute('name'),
-        type: el.getAttribute('type'),
-        placeholder: el.getAttribute('placeholder'),
-        class: el.className,
-        outerHTML: el.outerHTML,
-      }))
-    );
-    console.log('🧪 Detected inputs:', inputs);
+    // Wait a few seconds to let dynamic content load
+    await new Promise(res => setTimeout(res, 3000));
 
-    // Try common selectors
-    const possibleSelectors = [
-      'input[type="search"][data-sel-q]',
-      'input[placeholder*="Search"]',
-      'input[type="search"]',
-      'input'
-    ];
+    // Try to find the input element for search
+    const searchSelector = 'input[type="search"]';
+    const inputExists = await page.$(searchSelector);
 
-    let inputSelector = null;
-    for (const sel of possibleSelectors) {
-      const exists = await page.$(sel);
-      if (exists) {
-        inputSelector = sel;
-        break;
-      }
+    if (!inputExists) {
+      throw new Error(`⚠️ Failed to find search input with selector: ${searchSelector}`);
     }
 
-    if (!inputSelector) {
-      throw new Error('No valid search input selector found.');
-    }
-
-    console.log(`🔍 Using selector: ${inputSelector}`);
-    await page.click(inputSelector);
+    await page.click(searchSelector);
     await page.keyboard.down('Control');
     await page.keyboard.press('A');
     await page.keyboard.up('Control');
     await page.keyboard.press('Backspace');
-    await page.type(inputSelector, keywordSearch);
+    await page.type(searchSelector, keywordSearch);
     await page.keyboard.press('Enter');
 
     console.log(`🔍 Searching for: "${keywordSearch}"...`);
-    await page.waitForSelector('.resultrow', { timeout: 15000 });
+
+    // Wait for search results to appear
+    await page.waitForSelector('.resultrow', { timeout: 10000 });
 
     const profiles = await page.$$eval('.resultrow', rows =>
       rows.slice(0, 15).map(row => {
