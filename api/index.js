@@ -1,43 +1,31 @@
-import express from "express";
-import bodyParser from "body-parser";
-import puppeteer from "puppeteer";
+import puppeteer from "puppeteer-core";
+import chromium from "@sparticuz/chromium";
 
-const app = express();
-
-// Middleware
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
-
-// Define a sample API route
-app.get("/", async (req, res) => {
+export default async function handler(req, res) {
   try {
-    // Example Puppeteer usage: Fetch the title of a webpage
+    // Launch Puppeteer with a custom Chromium binary
     const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'], // Required for Vercel serverless functions
+      executablePath: await chromium.executablePath(),
+      headless: chromium.headless,
+      args: chromium.args,
     });
+
     const page = await browser.newPage();
-    await page.goto("https://example.com");
-    
+    await page.goto("https://example.com"); // Replace with your own logic
     const title = await page.title();
+
     await browser.close();
 
+    // Respond with the result
     res.status(200).json({
       message: "API is working!",
       title: title,
     });
   } catch (error) {
     console.error("Error in API:", error);
-    res.status(500).json({ error: "Internal Server Error" });
+    res.status(500).json({
+      error: "Internal Server Error",
+      details: error.message,
+    });
   }
-});
-
-// Start the server (for local development only)
-if (process.env.NODE_ENV !== "production") {
-  const PORT = 3000;
-  app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
-  });
 }
-
-export default app;
