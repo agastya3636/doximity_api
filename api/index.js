@@ -1,6 +1,6 @@
 import puppeteer from "puppeteer-core";
 import chromium from "@sparticuz/chromium";
-import scrapeProfiles from "../scrapeService.js"; // Adjust this path if needed
+import scrapeProfiles from "./scrape.js"; // Adjust this path if needed
 
 export default async function handler(req, res) {
   const { method, url } = req;
@@ -32,17 +32,19 @@ export default async function handler(req, res) {
     } finally {
       if (browser) await browser.close();
     }
-
   } else if (method === "POST" && url === "/scrape") {
     // Scraping route
     try {
+      // Ensure body parsing middleware is enabled
       const { specialty, location } = req.body;
 
+      // Validate the incoming request data
       if (!specialty || !location) {
         res.status(400).json({ error: "Please provide both specialty and location" });
         return;
       }
 
+      // Call scrapeProfiles to scrape the profiles
       const profiles = await scrapeProfiles({ specialty, location });
 
       res.status(200).json({
@@ -56,8 +58,8 @@ export default async function handler(req, res) {
         details: error.message,
       });
     }
-
   } else {
+    // Handle unsupported HTTP methods or routes
     res.status(404).json({ error: "Route not found" });
   }
 }
