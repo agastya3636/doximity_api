@@ -11,6 +11,8 @@ const scrapeProfiles = async ({ specialty, location }) => {
     executablePath: await chromium.executablePath(),
     headless: chromium.headless,
     args: chromium.args,
+    defaultViewport: chromium.defaultViewport,
+    ignoreHTTPSErrors: true,
   });
 
   const page = await browser.newPage();
@@ -21,20 +23,47 @@ const scrapeProfiles = async ({ specialty, location }) => {
   const { DOXIMITY_USERNAME, DOXIMITY_PASSWORD } = process.env;
 
   try {
-    console.log('🔐 Logging in...');
+    console.log('🔐 Navigating to login...');
     await page.goto('https://www.doximity.com/login', { waitUntil: 'networkidle2' });
 
-    await page.type('input[name="login"]', DOXIMITY_USERNAME);
-    await page.type('input[name="password"]', DOXIMITY_PASSWORD);
+    await page.waitForSelector('input[name="login"]', { timeout: 10000 });
+    await page.type('input[name="login"]', DOXIMITY_USERNAME, { delay: 50 });
+    await page.type('input[name="password"]', DOXIMITY_PASSWORD, { delay: 50 });
     await page.click('button[type="submit"]');
     await page.waitForNavigation({ waitUntil: 'networkidle2' });
 
-    console.log('✅ Logged in, performing search...');
+    console.log('✅ Logged in, navigating to search page...');
     await page.goto('https://www.doximity.com/talent_finder/search', { waitUntil: 'networkidle2' });
 
-    await page.type('input[type="search"][data-sel-q]', keywordSearch);
-    await page.keyboard.press('Enter');
-    await page.waitForSelector('.resultrow');
+    // Fallback selectors
+    const possibleSelectors = [
+      'input[type="search"][data-sel-q]',
+      'input[type="search"]',
+      'input[placeholder*="Search"]',
+    ];
+
+    let found = false;
+    for (const selector of possibleSelectors) {
+      try {
+        await page.waitForSelector(selector, { timeout: 3000 });
+        await page.click(selector);
+        await page.keyboard.down('Control');
+        await page.keyboard.press('A');
+        await page.keyboard.up('Control');
+        await page.keyboard.press('Backspace');
+        await page.type(selector, keywordSearch, { delay: 50 });
+        await page.keyboard.press('Enter');
+        found = true;
+        console.log(`🔍 Used selector: ${selector}`);
+        break;
+      } catch (e) {
+        console.warn(`⚠️ Failed to use selector: ${selector}`);
+      }
+    }
+
+    if (!found) throw new Error('Search input not found');
+
+    await page.waitForSelector('.resultrow', { timeout: 15000 });
 
     const profiles = await page.$$eval('.resultrow', rows =>
       rows.slice(0, 15).map(row => {
@@ -56,9 +85,9 @@ const scrapeProfiles = async ({ specialty, location }) => {
     await browser.close();
     return profiles;
   } catch (err) {
-    console.error('❌ Scraping error:', err);
+    console.error('❌ Scraping error:', err.message);
     await browser.close();
-    throw new Error('Scraping failed');
+    throw new Error('Scraping failed: ' + err.message);
   }
 };
 
