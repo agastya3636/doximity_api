@@ -1,65 +1,39 @@
 import puppeteer from "puppeteer-core";
 import chromium from "@sparticuz/chromium";
-import scrapeProfiles from "./scrape.js"; // Adjust this path if needed
+import scrapeProfiles from "../scrapeService.js";
 
 export default async function handler(req, res) {
-  const { method, url } = req;
-
-  if (method === "GET" && url === "/") {
-    // Puppeteer health check route
-    let browser;
-    try {
-      browser = await puppeteer.launch({
+  try {
+    if (req.method === "GET") {
+      const browser = await puppeteer.launch({
+        args: chromium.args,
+        defaultViewport: chromium.defaultViewport,
         executablePath: await chromium.executablePath(),
         headless: chromium.headless,
-        args: chromium.args,
       });
 
       const page = await browser.newPage();
       await page.goto("https://example.com", { waitUntil: "domcontentloaded" });
       const title = await page.title();
+      await browser.close();
 
-      res.status(200).json({
-        message: "API is working!",
-        title,
-      });
-    } catch (error) {
-      console.error("Error in Puppeteer route:", error);
-      res.status(500).json({
-        error: "Internal Server Error",
-        details: error.message,
-      });
-    } finally {
-      if (browser) await browser.close();
+      return res.status(200).json({ message: "API is working!", title });
     }
-  } else if (method === "POST" && url === "/scrape") {
-    // Scraping route
-    try {
-      // Ensure body parsing middleware is enabled
+
+    if (req.method === "POST") {
       const { specialty, location } = req.body;
 
-      // Validate the incoming request data
       if (!specialty || !location) {
-        res.status(400).json({ error: "Please provide both specialty and location" });
-        return;
+        return res.status(400).json({ error: "Please provide both specialty and location" });
       }
 
-      // Call scrapeProfiles to scrape the profiles
       const profiles = await scrapeProfiles({ specialty, location });
-
-      res.status(200).json({
-        message: "Scraping successful",
-        data: profiles,
-      });
-    } catch (error) {
-      console.error("Error in /scrape route:", error);
-      res.status(500).json({
-        error: "Internal Server Error",
-        details: error.message,
-      });
+      return res.status(200).json({ message: "Scraping successful", data: profiles });
     }
-  } else {
-    // Handle unsupported HTTP methods or routes
-    res.status(404).json({ error: "Route not found" });
+
+    return res.status(404).json({ error: "Route not found" });
+  } catch (error) {
+    console.error("Handler Error:", error);
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
   }
 }
