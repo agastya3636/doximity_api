@@ -1,4 +1,5 @@
-import puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer-core';
+import chromium from '@sparticuz/chromium';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -6,10 +7,10 @@ dotenv.config();
 const scrapeProfiles = async ({ specialty, location }) => {
   const keywordSearch = `${specialty} ${location}`.trim();
 
-  // Launch browser in headless mode for better speed
   const browser = await puppeteer.launch({
-    headless: true, // Faster in headless mode
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    executablePath: await chromium.executablePath(),
+    headless: chromium.headless,
+    args: chromium.args,
   });
 
   const page = await browser.newPage();
@@ -17,39 +18,24 @@ const scrapeProfiles = async ({ specialty, location }) => {
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36'
   );
 
-  const DOXIMITY_USERNAME = process.env.DOXIMITY_USERNAME;
-  const DOXIMITY_PASSWORD = process.env.DOXIMITY_PASSWORD;
+  const { DOXIMITY_USERNAME, DOXIMITY_PASSWORD } = process.env;
 
   try {
-    console.log('🔐 Navigating to login page...');
+    console.log('🔐 Logging in...');
     await page.goto('https://www.doximity.com/login', { waitUntil: 'networkidle2' });
 
-    await page.waitForSelector('input[name="login"]', { timeout: 15000 });
-    await page.type('input[name="login"]', DOXIMITY_USERNAME, { delay: 100 });
-    await page.type('input[name="password"]', DOXIMITY_PASSWORD, { delay: 100 });
+    await page.type('input[name="login"]', DOXIMITY_USERNAME);
+    await page.type('input[name="password"]', DOXIMITY_PASSWORD);
     await page.click('button[type="submit"]');
     await page.waitForNavigation({ waitUntil: 'networkidle2' });
 
-    console.log('✅ Logged in, navigating to search page...');
+    console.log('✅ Logged in, performing search...');
     await page.goto('https://www.doximity.com/talent_finder/search', { waitUntil: 'networkidle2' });
 
-    // Wait for search input and use a quicker method to perform the search
-    await page.waitForSelector('input[type="search"][data-sel-q]', { timeout: 15000 });
-    
-    // Clear and type the search query
-    await page.click('input[type="search"][data-sel-q]');
-    await page.keyboard.down('Control');
-    await page.keyboard.press('A');
-    await page.keyboard.up('Control');
-    await page.keyboard.press('Backspace');
     await page.type('input[type="search"][data-sel-q]', keywordSearch);
     await page.keyboard.press('Enter');
+    await page.waitForSelector('.resultrow');
 
-    console.log(`🔍 Searching for: "${keywordSearch}"...`);
-    // Wait for results to load faster by targeting the result rows directly
-    await page.waitForSelector('.resultrow', { timeout: 5000 });
-
-    // Scrape top 10 results for faster response
     const profiles = await page.$$eval('.resultrow', rows =>
       rows.slice(0, 15).map(row => {
         const name = row.querySelector('h2 a')?.innerText.trim() || null;
@@ -66,13 +52,13 @@ const scrapeProfiles = async ({ specialty, location }) => {
       })
     );
 
-    console.log(`📁 Found ${profiles.length} profiles`);
+    console.log(`📁 Scraped ${profiles.length} profiles`);
     await browser.close();
     return profiles;
   } catch (err) {
-    console.error('❌ Scraping failed:', err);
+    console.error('❌ Scraping error:', err);
     await browser.close();
-    throw new Error('Failed during scraping process');
+    throw new Error('Scraping failed');
   }
 };
 
